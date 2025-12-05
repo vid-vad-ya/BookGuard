@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import UploadIll from "../assets/upload.svg";
-import { extractPDF, extractTXT } from "../utils/extractText";
+import extractTextFromFile from "../utils/extractText";
 import { simulateAnalysis } from "../utils/fakeAnalysis";
 
 export default function Upload() {
   const [file, setFile] = useState(null);
+  const [previewURL, setPreviewURL] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
-
   const [loading, setLoading] = useState(false);
   const [stageText, setStageText] = useState("");
   const [progress, setProgress] = useState(0);
@@ -15,25 +15,33 @@ export default function Upload() {
   const navigate = useNavigate();
 
   // --------------------------
-  // Drag + Drop Handlers
+  // File handlers
   // --------------------------
+  const handleFileSelect = (e) => {
+    const selected = e.target.files[0];
+    if (selected) {
+      setFile(selected);
+      setPreviewURL(URL.createObjectURL(selected));
+    }
+  };
+
   const handleDragOver = (e) => {
     e.preventDefault();
     setIsDragging(true);
   };
 
-  const handleDragLeave = () => setIsDragging(false);
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
 
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragging(false);
     const dropped = e.dataTransfer.files[0];
-    if (dropped) setFile(dropped);
-  };
-
-  const handleFileSelect = (e) => {
-    const selected = e.target.files[0];
-    if (selected) setFile(selected);
+    if (dropped) {
+      setFile(dropped);
+      setPreviewURL(URL.createObjectURL(dropped));
+    }
   };
 
   // --------------------------
@@ -44,57 +52,36 @@ export default function Upload() {
 
     setLoading(true);
     setStageText("Extracting text...");
-    setProgress(0);
+    setProgress(20);
 
     let extractedText = "";
 
     try {
-      // Detect PDF
-      if (file.type === "application/pdf") {
-        extractedText = await extractPDF(file, (p) => setProgress(p));
-      }
-      // Detect TXT
-      else if (file.type === "text/plain") {
-        extractedText = await extractTXT(file);
-        setProgress(100);
-      }
-      // Anything else
-      else {
-        alert("Unsupported format. Please upload a PDF or TXT file.");
-        setLoading(false);
-        return;
-      }
+      extractedText = await extractTextFromFile(file);
+      setProgress(100);
     } catch (err) {
       console.error(err);
-      alert("Text extraction failed. Try another file.");
+      alert("Text extraction failed!");
       setLoading(false);
       return;
     }
 
-    // --------------------------
-    // Run Fake Backend Analysis
-    // --------------------------
     setStageText("Running analysis...");
-    setProgress(0);
+    setProgress(40);
 
     const { results } = await simulateAnalysis(extractedText);
 
     navigate(`/analysis/${Date.now()}`, {
-      state: {
-        startPipeline: true,
-        extractedText,
-        results,
-      },
+      state: { extractedText, results },
     });
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center px-6 relative bg-bg-dark">
-      {/* Background Glow */}
       <div className="absolute inset-0 bg-gradient-cyan blur-[160px] opacity-10 -z-10"></div>
 
-      <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-10 items-center py-12">
-        
+      <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-10 items-start py-12">
+
         {/* Illustration */}
         <div className="flex items-center justify-center">
           <img src={UploadIll} alt="Upload illustration" className="w-full max-w-sm" />
@@ -104,7 +91,7 @@ export default function Upload() {
         <div className="bg-[#0f2130] border border-border-card p-8 rounded-2xl shadow-glow-cyan">
           <h2 className="text-2xl font-semibold text-accent-cyan mb-4">Upload a File</h2>
 
-          {/* Drag + Drop Box */}
+          {/* Drag & Drop */}
           <div
             className={`w-full h-44 rounded-xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition
               ${
@@ -118,17 +105,15 @@ export default function Upload() {
             onClick={() => document.getElementById("fileInput").click()}
           >
             {!file ? (
-              <div className="text-center">
+              <>
                 <p className="text-text-main text-lg">Drag & Drop your file here</p>
-                <p className="text-text-muted text-sm mt-1">
-                  or click to browse (.pdf, .txt)
-                </p>
-              </div>
+                <p className="text-text-muted text-sm mt-1">or click to browse (.pdf, .txt)</p>
+              </>
             ) : (
-              <div className="text-center">
+              <>
                 <p className="text-text-muted">Selected file:</p>
                 <p className="text-accent-cyan font-semibold mt-1">{file.name}</p>
-              </div>
+              </>
             )}
 
             <input
@@ -140,7 +125,24 @@ export default function Upload() {
             />
           </div>
 
-          {/* Analyze Button OR Loading */}
+          {/* Preview Section */}
+          {previewURL && (
+            <div className="mt-6 p-3 rounded-xl bg-[#0c1927] border border-border-card">
+              <h3 className="text-text-main font-semibold mb-2">Preview</h3>
+
+              {file.type === "application/pdf" ? (
+                <embed
+                  src={previewURL}
+                  type="application/pdf"
+                  className="w-full h-[350px] rounded-lg"
+                />
+              ) : (
+                <p className="p-2 bg-[#112536] rounded text-text-muted text-sm">{file.name}</p>
+              )}
+            </div>
+          )}
+
+          {/* Analyze Button */}
           {!loading && file && (
             <button
               onClick={handleAnalyze}
@@ -166,9 +168,8 @@ export default function Upload() {
             </div>
           )}
 
-          {/* Footer */}
           <div className="mt-4 text-sm text-text-muted">
-            <strong>Supported formats:</strong> PDF, TXT • Max 10 MB
+            <strong>Supported:</strong> PDF, TXT • Max 10 MB
           </div>
         </div>
       </div>
