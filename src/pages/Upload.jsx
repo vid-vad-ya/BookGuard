@@ -1,3 +1,4 @@
+// src/pages/Upload.jsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import UploadIll from "../assets/upload.svg";
@@ -6,47 +7,19 @@ import { simulateAnalysis } from "../utils/fakeAnalysis";
 
 export default function Upload() {
   const [file, setFile] = useState(null);
-  const [previewURL, setPreviewURL] = useState(null);
-  const [txtPreview, setTxtPreview] = useState("");
   const [isDragging, setIsDragging] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [stageText, setStageText] = useState("");
   const [progress, setProgress] = useState(0);
 
+  const [bookTitle, setBookTitle] = useState(""); // NEW: book title input
+
   const navigate = useNavigate();
 
-  // --------------------------
-  // File Handling
-  // --------------------------
-  const handleFileSelect = (e) => {
-    const selected = e.target.files[0];
-    if (selected) {
-      handleNewFile(selected);
-    }
-  };
-
-  const handleNewFile = async (selectedFile) => {
-    setFile(selectedFile);
-    setPreviewURL(null);
-    setTxtPreview("");
-
-    const ext = selectedFile.name.split(".").pop().toLowerCase();
-
-    // Create PDF preview
-    if (ext === "pdf") {
-      const pdfBlobURL = URL.createObjectURL(selectedFile);
-      setPreviewURL(pdfBlobURL);
-    }
-
-    // Generate TXT preview (first 300 chars)
-    if (ext === "txt") {
-      const text = await selectedFile.text();
-      setTxtPreview(text.slice(0, 300));
-    }
-  };
-
-  // Drag & Drop
+  // ------------------------------------
+  // Drag + Drop Handlers
+  // ------------------------------------
   const handleDragOver = (e) => {
     e.preventDefault();
     setIsDragging(true);
@@ -54,18 +27,21 @@ export default function Upload() {
 
   const handleDragLeave = () => setIsDragging(false);
 
-  const handleDrop = async (e) => {
+  const handleDrop = (e) => {
     e.preventDefault();
     setIsDragging(false);
     const dropped = e.dataTransfer.files[0];
-    if (dropped) {
-      handleNewFile(dropped);
-    }
+    if (dropped) setFile(dropped);
   };
 
-  // --------------------------
+  const handleFileSelect = (e) => {
+    const selected = e.target.files[0];
+    if (selected) setFile(selected);
+  };
+
+  // ------------------------------------
   // MAIN: Extract + Analyze
-  // --------------------------
+  // ------------------------------------
   const handleAnalyze = async () => {
     if (!file) return;
 
@@ -76,7 +52,7 @@ export default function Upload() {
     let extractedText = "";
 
     try {
-      extractedText = await extractTextFromFile(file);
+      extractedText = await extractTextFromFile(file, setProgress);
       setProgress(100);
     } catch (err) {
       console.error(err);
@@ -85,9 +61,11 @@ export default function Upload() {
       return;
     }
 
-    // Fake backend analysis
+    // ------------------------------------
+    // Run Fake Backend Analysis
+    // ------------------------------------
     setStageText("Running analysis...");
-    setProgress(40);
+    setProgress(30);
 
     const { results } = await simulateAnalysis(extractedText);
 
@@ -96,41 +74,36 @@ export default function Upload() {
         startPipeline: true,
         extractedText,
         results,
+        bookTitle: bookTitle.trim() || "", // send title to analysis
       },
     });
   };
 
-  // --------------------------
-  // UI
-  // --------------------------
   return (
-    <div className="min-h-screen pt-24 px-6 relative bg-bg-dark text-text-main">
+    <div className="min-h-screen flex items-center justify-center px-6 relative bg-bg-dark">
       {/* Background Glow */}
-      <div className="absolute inset-0 bg-gradient-cyan blur-[150px] opacity-10 -z-10"></div>
+      <div className="absolute inset-0 bg-gradient-cyan blur-[160px] opacity-10 -z-10"></div>
 
-      <h1 className="text-4xl font-bold text-accent-cyan mb-10 text-center">
-        Upload a Book
-      </h1>
+      <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-10 items-center py-12">
 
-      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
-        
         {/* Illustration */}
         <div className="flex items-center justify-center">
           <img src={UploadIll} alt="Upload illustration" className="w-full max-w-sm" />
         </div>
 
-        {/* Upload Box */}
+        {/* Upload Panel */}
         <div className="bg-[#0f2130] border border-border-card p-8 rounded-2xl shadow-glow-cyan">
-          <h2 className="text-2xl font-semibold text-accent-cyan mb-4">Select a File</h2>
+
+          <h2 className="text-2xl font-semibold text-accent-cyan mb-4">Upload a File</h2>
 
           {/* Drag + Drop Box */}
           <div
             className={`w-full h-44 rounded-xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition
-            ${
-              isDragging
-                ? "border-accent-cyan bg-[#06202a] shadow-glow-strong"
-                : "border-border-card hover:border-accent-cyan hover:shadow-glow-cyan"
-            }`}
+              ${
+                isDragging
+                  ? "border-accent-cyan bg-[#06202a] shadow-glow-strong"
+                  : "border-border-card hover:border-accent-cyan hover:shadow-glow-cyan"
+              }`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
@@ -159,17 +132,29 @@ export default function Upload() {
             />
           </div>
 
-          {/* Analyze Button */}
+          {/* NEW — Title input */}
+          <div className="mt-5">
+            <label className="text-sm text-text-muted">Book Title (optional)</label>
+            <input
+              type="text"
+              value={bookTitle}
+              onChange={(e) => setBookTitle(e.target.value)}
+              placeholder="Enter book title for the PDF report"
+              className="mt-2 w-full p-3 rounded-lg bg-[#071021] border border-white/10 text-text-main"
+            />
+          </div>
+
+          {/* Analyze Button OR Loading */}
           {!loading && file && (
             <button
               onClick={handleAnalyze}
-              className="mt-6 w-full py-3 rounded-xl bg-gradient-to-r from-accent-teal to-accent-cyan text-bg-dark font-semibold shadow-glow-cyan"
+              className="mt-6 w-full py-3 rounded-xl bg-gradient-to-r from-accent-teal to-accent-cyan text-bg-dark font-semibold shadow-glow-cyan transition-all"
             >
               Analyze Book
             </button>
           )}
 
-          {/* Loading */}
+          {/* Loading UI */}
           {loading && (
             <div className="mt-6 flex flex-col items-center w-full">
               <p className="text-text-muted text-lg mb-3">{stageText}</p>
@@ -185,40 +170,34 @@ export default function Upload() {
             </div>
           )}
 
+          {/* Footer */}
           <div className="mt-4 text-sm text-text-muted">
             <strong>Supported formats:</strong> PDF, TXT • Max 10 MB
           </div>
         </div>
       </div>
 
-      {/* --------------------------
-          PREVIEW SECTION
-      --------------------------- */}
-      {file && (
-        <div className="max-w-6xl mx-auto mt-12">
-          <h2 className="text-2xl font-semibold text-accent-cyan mb-4">
-            Preview
-          </h2>
+      {/* PDF Preview (auto shown when file is PDF) */}
+      {file && file.type === "application/pdf" && (
+        <div className="w-full max-w-4xl mt-10 bg-[#0f2130] border border-border-card rounded-xl p-6 shadow-glow-cyan">
+          <h3 className="text-accent-cyan text-lg font-semibold mb-3">Preview</h3>
 
-          {/* PDF PREVIEW */}
-          {previewURL && (
-            <div className="w-full h-[70vh] bg-[#0d1a26] rounded-xl overflow-hidden shadow-glow-cyan border border-border-card mb-10">
-              <iframe
-                src={previewURL}
-                title="PDF Preview"
-                className="w-full h-full"
-              ></iframe>
-            </div>
-          )}
+          <iframe
+            src={URL.createObjectURL(file)}
+            title="PDF Preview"
+            className="w-full h-[70vh] rounded-lg border border-white/10"
+          ></iframe>
+        </div>
+      )}
 
-          {/* TXT PREVIEW */}
-          {txtPreview && (
-            <div className="bg-[#0d1a26] p-6 rounded-xl border border-border-card shadow-glow-cyan">
-              <pre className="text-text-muted whitespace-pre-wrap text-sm">
-                {txtPreview} {txtPreview.length >= 300 && "..."}
-              </pre>
-            </div>
-          )}
+      {/* TXT Preview */}
+      {file && file.type === "text/plain" && (
+        <div className="w-full max-w-4xl mt-10 bg-[#0f2130] border border-border-card rounded-xl p-6 shadow-glow-cyan">
+          <h3 className="text-accent-cyan text-lg font-semibold mb-3">Preview</h3>
+
+          <pre className="text-text-muted text-sm whitespace-pre-wrap max-h-[60vh] overflow-y-auto">
+            Loading text preview…
+          </pre>
         </div>
       )}
     </div>
